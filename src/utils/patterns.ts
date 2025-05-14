@@ -4,7 +4,8 @@ static readonly EMAIL = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 // Matches a password with at least 8 characters, including at least one letter and one number
 // (e.g., abc12345, A1b2c3d4)
-static readonly PASSWORD = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+static readonly PASSWORD = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/
+;
 
 // Matches alphabetic names with optional spaces (e.g., "John Doe", "Alice")
 // Disallows numbers and special characters

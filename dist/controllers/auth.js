@@ -9,10 +9,16 @@ const asynchandler_1 = require("../utils/asynchandler");
 const patterns_1 = require("../utils/patterns");
 const mysql_helper_1 = require("../helper/mysql-helper");
 const multer_1 = __importDefault(require("multer"));
+const imagekit_1 = __importDefault(require("imagekit"));
 exports.authRouter = express_1.default.Router(); // Create a new router instance
 exports.authRouter.use(express_1.default.json()); // Parse JSON request bodies
 const storage = multer_1.default.memoryStorage(); // or use diskStorage if saving to disk
 const upload = (0, multer_1.default)({ storage });
+const imagekit = new imagekit_1.default({
+    publicKey: "public_Oo7AmdsNAR3ib3zQvLu0DYuMZrU=",
+    privateKey: "private_ohtIPrTHBmT9UqjLqoqNPLBPbgI=",
+    urlEndpoint: "https://ik.imagekit.io/sfmijw3gk"
+});
 //FOR USER CREATION INTO THE DB
 exports.authRouter.post('/user_creation', upload.single('profilePic'), (0, asynchandler_1.async_errorhandler)(async (req, res) => {
     const { fullName, username, email, phone, dob, gender, password, confirmPassword, address, userType } = req.body;
@@ -102,6 +108,74 @@ exports.authRouter.get('/get_user_list', (0, asynchandler_1.async_errorhandler)(
         }
     }
     catch (err) {
+    }
+}));
+exports.authRouter.post('/users/uploadImage', upload.array('image', 10), (0, asynchandler_1.async_errorhandler)(async (req, res) => {
+    try {
+        const { email, password, userId } = req.body;
+        if (!email)
+            return res.status(400).json({ sts: '400', msg: 'Email is required' });
+        if (!password)
+            return res.status(400).json({ sts: '400', msg: 'Password is required' });
+        if (!userId)
+            return res.status(400).json({ sts: '400', msg: 'User id is required' });
+        if (!patterns_1.PATTERNS.EMAIL.test(email))
+            return res.status(400).json({ sts: '400', msg: 'Invalid email Id' });
+        if (!patterns_1.PATTERNS.PASSWORD.test(password))
+            return res.status(400).json({ sts: '400', msg: 'Invalid password' });
+        // UPLOADING IMAGE TO CLOUD
+        const files = req.files;
+        if (!files || files.length === 0) {
+            return res.status(400).json({ message: 'No images uploaded' });
+        }
+        const uploadedImages = [];
+        for (const file of files) {
+            try {
+                const result = await imagekit.upload({
+                    file: file.buffer.toString('base64'),
+                    fileName: `${userId}/${file.originalname}`,
+                    folder: userId
+                });
+                uploadedImages.push({
+                    fileName: result.name,
+                    filePath: result.filePath,
+                    url: result.url,
+                });
+            }
+            catch (imgErr) {
+                console.error(`Error uploading ${file.originalname}:`, imgErr);
+            }
+        }
+        // IF UPLOADS TO IMAGEKIT ARE SUCCESSFUL, CALL THE BATCH SP
+        if (uploadedImages.length > 0) {
+            const imageArray = uploadedImages.map(img => ({
+                fileName: img.fileName,
+                filePath: img.filePath
+            }));
+            const sqlstring = `CALL upload_images_batch(?,?,?,?)`;
+            const params = [
+                userId,
+                email,
+                password,
+                JSON.stringify(imageArray)
+            ];
+            const dbResponse = await mysql_helper_1.mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+            return res.status(200).json({
+                sts: '200',
+                msg: 'Images uploaded and stored successfully',
+                data: dbResponse[0][0],
+            });
+        }
+        else {
+            return res.status(500).json({
+                sts: '500',
+                msg: 'No images were uploaded to ImageKit'
+            });
+        }
+    }
+    catch (error) {
+        console.error('Image upload error:', error);
+        return res.status(500).json({ message: 'Upload failed', error });
     }
 }));
 //# sourceMappingURL=auth.js.map

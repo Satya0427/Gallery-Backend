@@ -3,6 +3,8 @@ import { async_errorhandler } from '../utils/asynchandler';
 import { PATTERNS } from '../utils/patterns';
 import { mySqlHelpers } from '../helper/mysql-helper';
 import multer from 'multer';
+import ImageKit from 'imagekit';
+
 
 export const authRouter = express.Router(); // Create a new router instance
 
@@ -11,6 +13,13 @@ authRouter.use(express.json()); // Parse JSON request bodies
 const storage = multer.memoryStorage(); // or use diskStorage if saving to disk
 
 const upload = multer({ storage });
+
+
+const imagekit = new ImageKit({
+    publicKey: "public_Oo7AmdsNAR3ib3zQvLu0DYuMZrU=",
+    privateKey: "private_ohtIPrTHBmT9UqjLqoqNPLBPbgI=",
+    urlEndpoint: "https://ik.imagekit.io/sfmijw3gk"
+});
 
 
 //FOR USER CREATION INTO THE DB
@@ -41,10 +50,8 @@ authRouter.post('/user_creation', upload.single('profilePic'), async_errorhandle
         if (Array.isArray(dbResponse) && dbResponse.length >= 2) {
             const resultSet1 = dbResponse[0]?.[0]; // sts & msg
             const resultSet2 = dbResponse[1];      // username list
-
             const sts = resultSet1?.sts;
             const msg = resultSet1?.msg;
-
             if (sts == '200') {
                 return res.status(200).json({ sts, msg, data: resultSet2 });
             } else {
@@ -101,3 +108,75 @@ authRouter.get('/get_user_list', async_errorhandler(async (req: Request, res: Re
 
     }
 }))
+
+authRouter.post('/users/uploadImage', upload.array('image', 10), async_errorhandler(async (req: Request, res: Response) => {
+    try {
+        const { email, password, userId } = req.body;
+
+        if (!email) return res.status(400).json({ sts: '400', msg: 'Email is required' });
+        if (!password) return res.status(400).json({ sts: '400', msg: 'Password is required' });
+        if (!userId) return res.status(400).json({ sts: '400', msg: 'User id is required' });
+
+        if (!PATTERNS.EMAIL.test(email)) return res.status(400).json({ sts: '400', msg: 'Invalid email Id' });
+        if (!PATTERNS.PASSWORD.test(password)) return res.status(400).json({ sts: '400', msg: 'Invalid password' });
+
+        // UPLOADING IMAGE TO CLOUD
+        const files = req.files as Express.Multer.File[];
+        if (!files || files.length === 0) {
+            return res.status(400).json({ message: 'No images uploaded' });
+        }
+        const uploadedImages = [];
+        for (const file of files) {
+            try {
+                const result = await imagekit.upload({
+                    file: file.buffer.toString('base64'),
+                    fileName: file.originalname,
+                    folder:userId
+                });
+
+                uploadedImages.push({
+                    fileName: result.name,
+                    filePath: result.filePath,
+                    url: result.url,
+                });
+
+            } catch (imgErr) {
+                console.error(`Error uploading ${file.originalname}:`, imgErr);
+            }
+        }
+
+        // IF UPLOADS TO IMAGEKIT ARE SUCCESSFUL, CALL THE BATCH SP
+        if (uploadedImages.length > 0) {
+            const imageArray = uploadedImages.map(img => ({
+                fileName: img.fileName,
+                filePath: img.filePath
+            }));
+
+            const sqlstring = `CALL upload_images_batch(?,?,?,?)`;
+            const params = [
+                userId,
+                email,
+                password,
+                JSON.stringify(imageArray)
+            ];
+
+            const dbResponse = await mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+
+            return res.status(200).json({
+                sts: '200',
+                msg: 'Images uploaded and stored successfully',
+                data: dbResponse[0][0],
+                
+            });
+        } else {
+            return res.status(500).json({
+                sts: '500',
+                msg: 'No images were uploaded to ImageKit'
+            });
+        }
+
+    } catch (error) {
+        console.error('Image upload error:', error);
+        return res.status(500).json({ message: 'Upload failed', error });
+    }
+}));

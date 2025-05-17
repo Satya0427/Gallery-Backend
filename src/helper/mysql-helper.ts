@@ -26,19 +26,19 @@ class mySqlHelper {
         }
     }
 
-   public exicuteWithQueryParams = async (mySqlQuery: string, params: any): Promise<any> => {
-    try {
-        const connection = await this.pool.getConnection();
+    public exicuteWithQueryParams = async (mySqlQuery: string, params: any): Promise<any> => {
         try {
-            const [rows] = await connection.query(mySqlQuery, params);
-            console.log(rows);
-            return rows;
-        } finally {
-            connection.release();
+            const connection = await this.pool.getConnection();
+            try {
+                const [rows] = await connection.query(mySqlQuery, params);
+                console.log(rows);
+                return rows;
+            } finally {
+                connection.release();
+            }
+        } catch (error) {
+            throw error;
         }
-    } catch (error) {
-        throw error;
     }
-}
 
-}export const mySqlHelpers = new mySqlHelper();
+} export const mySqlHelpers = new mySqlHelper();

@@ -12,7 +12,7 @@ export const async_errorhandler = (func: Function) => {
                     next(error);
                 } else {
                     console.log(error);
-                    let err = {sts:'500',msg:'Something Went to Wrong'}
+                    let err = { sts: '500', msg: 'Something Went to Wrong' }
                     next(err);
                 }
             })

@@ -68,17 +68,42 @@ authRouter.post('/user_creation', upload.single('profilePic'), async_errorhandle
 
 }));
 
+
+//FOR USER LOGIN 
+authRouter.post('/login', async_errorhandler(async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+    if (!email) return res.status(400).json({ sts: '400', msg: 'Email is required' });
+    if (!password) return res.status(400).json({ sts: '400', msg: 'Password is required' });
+
+    const params = [email, password];
+    const sqlstring = `CALL user_login(?,?);`
+
+    const dbResponse = await mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+    if (Array.isArray(dbResponse) && dbResponse.length >= 2) {
+        const resultSet1 = dbResponse[0]?.[0]; // sts & msg
+        const resultSet2 = dbResponse[1][0];      // username list
+        const sts = resultSet1?.sts;
+        const msg = resultSet1?.msg;
+        if (sts == '200') {
+            return res.status(200).json({ sts, msg, data: resultSet2 });
+        } else {
+            return res.status(400).json({ sts, msg });
+        }
+    } else {
+        console.log('Unexpected DB response format:', dbResponse);
+        return res.status(400).json({ sts: '400', msg: 'Unexpected response from DB' });
+    }
+
+}))
+
 // FOR GETTING THE USERS
 
-authRouter.get('/get_user_list', async_errorhandler(async (req: Request, res: Response) => {
+authRouter.post('/get_user_list', async_errorhandler(async (req: Request, res: Response) => {
     const { email, password } = req?.body;
     if (!email) return res.status(400).json({ sts: '200', msg: 'Email is required' });
     if (!password) return res.status(400).json({ sts: '200', msg: 'Password is required' });
-
     if (!PATTERNS.EMAIL.test(email)) return res.status(400).json({ sts: '400', msg: 'Invalid email Id' })
     if (!PATTERNS.PASSWORD.test(password)) return res.status(400).json({ sts: '400', msg: 'Invalid password' })
-
-
     try {
         const params = [email, password];
         const sqlstring = `CALL GET_USERS_LIST(?,?)`
@@ -109,7 +134,7 @@ authRouter.get('/get_user_list', async_errorhandler(async (req: Request, res: Re
     }
 }))
 
-authRouter.post('/users/uploadImage', upload.array('image', 10), async_errorhandler(async (req: Request, res: Response) => {
+authRouter.post('/users/uploadImage', upload.array('image', 50), async_errorhandler(async (req: Request, res: Response) => {
     try {
         const { email, password, userId } = req.body;
 
@@ -131,7 +156,7 @@ authRouter.post('/users/uploadImage', upload.array('image', 10), async_errorhand
                 const result = await imagekit.upload({
                     file: file.buffer.toString('base64'),
                     fileName: file.originalname,
-                    folder:userId
+                    folder: userId
                 });
 
                 uploadedImages.push({
@@ -166,7 +191,7 @@ authRouter.post('/users/uploadImage', upload.array('image', 10), async_errorhand
                 sts: '200',
                 msg: 'Images uploaded and stored successfully',
                 data: dbResponse[0][0],
-                
+
             });
         } else {
             return res.status(500).json({
@@ -178,5 +203,48 @@ authRouter.post('/users/uploadImage', upload.array('image', 10), async_errorhand
     } catch (error) {
         console.error('Image upload error:', error);
         return res.status(500).json({ message: 'Upload failed', error });
+    }
+}));
+
+
+authRouter.post('/getAllDocumetns', async_errorhandler(async (req: Request, res: Response) => {
+    const { userid, email, password } = req?.body;
+
+    const params = [userid, email, password];
+    const sqlstring = `CALL get_user_images(?,?,?)`;
+
+    const dbResponse = await mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+
+    if (Array.isArray(dbResponse) && dbResponse.length >= 2) {
+        const resultSet1 = dbResponse[0]?.[0]; // sts & msg
+        const resultSet2 = dbResponse[1];      // list of imagePath rows
+        const sts = resultSet1?.sts;
+        const msg = resultSet1?.msg;
+
+        if (sts == '200') {
+            // Collect all image lists
+            // const allImages = [];
+            try {
+                const result = await imagekit.listFiles({
+                    path: userid,
+                    limit: 100
+                });
+               const images =  result.map((e:any)=>({
+                    imageName:e.name,
+                    imageUrl:e.url
+                }))
+                console.log(result);
+                return res.status(200).json({ sts: '200', msg: 'get records success', data: images })
+
+            } catch (err) {
+                // console.error(`Failed to fetch images from ${path}:`, err);
+            }
+            // return res.status(200).json({ sts, msg, data: allImages });
+        } else {
+            return res.status(400).json({ sts, msg });
+        }
+    } else {
+        console.log('Unexpected DB response format:', dbResponse);
+        return res.status(400).json({ sts: '400', msg: 'Unexpected response from DB' });
     }
 }));

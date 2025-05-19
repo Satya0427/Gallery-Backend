@@ -69,8 +69,35 @@ exports.authRouter.post('/user_creation', upload.single('profilePic'), (0, async
         return res.status(500).json({ sts: 500, msg: 'Database error', error: error.message });
     }
 }));
+//FOR USER LOGIN 
+exports.authRouter.post('/login', (0, asynchandler_1.async_errorhandler)(async (req, res) => {
+    const { email, password } = req.body;
+    if (!email)
+        return res.status(400).json({ sts: '400', msg: 'Email is required' });
+    if (!password)
+        return res.status(400).json({ sts: '400', msg: 'Password is required' });
+    const params = [email, password];
+    const sqlstring = `CALL user_login(?,?);`;
+    const dbResponse = await mysql_helper_1.mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+    if (Array.isArray(dbResponse) && dbResponse.length >= 2) {
+        const resultSet1 = dbResponse[0]?.[0]; // sts & msg
+        const resultSet2 = dbResponse[1][0]; // username list
+        const sts = resultSet1?.sts;
+        const msg = resultSet1?.msg;
+        if (sts == '200') {
+            return res.status(200).json({ sts, msg, data: resultSet2 });
+        }
+        else {
+            return res.status(400).json({ sts, msg });
+        }
+    }
+    else {
+        console.log('Unexpected DB response format:', dbResponse);
+        return res.status(400).json({ sts: '400', msg: 'Unexpected response from DB' });
+    }
+}));
 // FOR GETTING THE USERS
-exports.authRouter.get('/get_user_list', (0, asynchandler_1.async_errorhandler)(async (req, res) => {
+exports.authRouter.post('/get_user_list', (0, asynchandler_1.async_errorhandler)(async (req, res) => {
     const { email, password } = req?.body;
     if (!email)
         return res.status(400).json({ sts: '200', msg: 'Email is required' });
@@ -110,7 +137,7 @@ exports.authRouter.get('/get_user_list', (0, asynchandler_1.async_errorhandler)(
     catch (err) {
     }
 }));
-exports.authRouter.post('/users/uploadImage', upload.array('image', 10), (0, asynchandler_1.async_errorhandler)(async (req, res) => {
+exports.authRouter.post('/users/uploadImage', upload.array('image', 50), (0, asynchandler_1.async_errorhandler)(async (req, res) => {
     try {
         const { email, password, userId } = req.body;
         if (!email)
@@ -133,7 +160,7 @@ exports.authRouter.post('/users/uploadImage', upload.array('image', 10), (0, asy
             try {
                 const result = await imagekit.upload({
                     file: file.buffer.toString('base64'),
-                    fileName: `${userId}/${file.originalname}`,
+                    fileName: file.originalname,
                     folder: userId
                 });
                 uploadedImages.push({
@@ -176,6 +203,45 @@ exports.authRouter.post('/users/uploadImage', upload.array('image', 10), (0, asy
     catch (error) {
         console.error('Image upload error:', error);
         return res.status(500).json({ message: 'Upload failed', error });
+    }
+}));
+exports.authRouter.post('/getAllDocumetns', (0, asynchandler_1.async_errorhandler)(async (req, res) => {
+    const { userid, email, password } = req?.body;
+    const params = [userid, email, password];
+    const sqlstring = `CALL get_user_images(?,?,?)`;
+    const dbResponse = await mysql_helper_1.mySqlHelpers.exicuteWithQueryParams(sqlstring, params);
+    if (Array.isArray(dbResponse) && dbResponse.length >= 2) {
+        const resultSet1 = dbResponse[0]?.[0]; // sts & msg
+        const resultSet2 = dbResponse[1]; // list of imagePath rows
+        const sts = resultSet1?.sts;
+        const msg = resultSet1?.msg;
+        if (sts == '200') {
+            // Collect all image lists
+            // const allImages = [];
+            try {
+                const result = await imagekit.listFiles({
+                    path: userid,
+                    limit: 100
+                });
+                const images = result.map((e) => ({
+                    imageName: e.name,
+                    imageUrl: e.url
+                }));
+                console.log(result);
+                return res.status(200).json({ sts: '200', msg: 'get records success', data: images });
+            }
+            catch (err) {
+                // console.error(`Failed to fetch images from ${path}:`, err);
+            }
+            // return res.status(200).json({ sts, msg, data: allImages });
+        }
+        else {
+            return res.status(400).json({ sts, msg });
+        }
+    }
+    else {
+        console.log('Unexpected DB response format:', dbResponse);
+        return res.status(400).json({ sts: '400', msg: 'Unexpected response from DB' });
     }
 }));
 //# sourceMappingURL=auth.js.map
